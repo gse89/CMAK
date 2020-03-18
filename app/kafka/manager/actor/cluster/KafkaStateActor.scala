@@ -25,15 +25,19 @@ import kafka.manager.features.{ClusterFeatures, KMDeleteTopicFeature, KMPollCons
 import kafka.manager.model.ActorModel._
 import kafka.manager.model._
 import kafka.manager.utils.ZkUtils
+import kafka.manager.utils.two30.{GroupMetadata, GroupMetadataKey, MemberMetadata, OffsetKey}
 import kafka.manager.utils.zero81.{PreferredReplicaLeaderElectionCommand, ReassignPartitionCommand}
-import kafka.manager.utils.one10.{GroupMetadata, GroupMetadataKey, MemberMetadata, OffsetKey}
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.recipes.cache.PathChildrenCache.StartMode
 import org.apache.curator.framework.recipes.cache._
 import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.clients.CommonClientConfigs.SECURITY_PROTOCOL_CONFIG
+import org.apache.kafka.clients.admin.{AdminClient, DescribeConsumerGroupsOptions}
+import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerRecords, KafkaConsumer}
-import org.apache.kafka.common.{ConsumerGroupState, TopicPartition}
-import org.apache.kafka.common.requests.DescribeGroupsResponse
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.utils.Time
 import org.joda.time.{DateTime, DateTimeZone}
 
 import scala.collection.concurrent.TrieMap
@@ -41,14 +45,6 @@ import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-import org.apache.kafka.clients.consumer.ConsumerConfig._
-import org.apache.kafka.clients.consumer.internals.ConsumerProtocol
-import org.apache.kafka.common.config.SaslConfigs
-import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.clients.CommonClientConfigs.SECURITY_PROTOCOL_CONFIG
-import org.apache.kafka.clients.admin.{AdminClient, ConsumerGroupDescription, DescribeConsumerGroupsOptions}
-import org.apache.kafka.common.KafkaFuture.BiConsumer
-import org.apache.kafka.common.utils.Time
 
 /**
   * @author hiral
@@ -115,9 +111,6 @@ case class KafkaAdminClientActor(config: KafkaAdminClientActorConfig) extends Ba
     AdminClient.create(props)
   }
 
-  private def isValidConsumerGroupResponse(metadata: DescribeGroupsResponse.GroupMetadata): Boolean =
-    metadata.error == Errors.NONE && (metadata.state == "Dead" || metadata.state == "Empty" || metadata.protocolType == ConsumerProtocol.PROTOCOL_TYPE)
-
   override def processQueryRequest(request: QueryRequest): Unit = {
     if(adminClientOption.isEmpty) {
       context.actorSelection(config.kafkaStateActorPath).tell(KSGetBrokers, self)
@@ -176,7 +169,7 @@ class KafkaAdminClient(context: => ActorContext, adminClientActorPath: ActorPath
 
 
 object KafkaManagedOffsetCache {
-  val supportedVersions: Set[KafkaVersion] = Set(Kafka_0_8_2_0, Kafka_0_8_2_1, Kafka_0_8_2_2, Kafka_0_9_0_0, Kafka_0_9_0_1, Kafka_0_10_0_0, Kafka_0_10_0_1, Kafka_0_10_1_0, Kafka_0_10_1_1, Kafka_0_10_2_0, Kafka_0_10_2_1, Kafka_0_11_0_0, Kafka_0_11_0_2, Kafka_1_0_0, Kafka_1_0_1, Kafka_1_1_0, Kafka_1_1_1, Kafka_2_0_0, Kafka_2_1_0, Kafka_2_1_1, Kafka_2_2_0)
+  val supportedVersions: Set[KafkaVersion] = Set(Kafka_0_8_2_0, Kafka_0_8_2_1, Kafka_0_8_2_2, Kafka_0_9_0_0, Kafka_0_9_0_1, Kafka_0_10_0_0, Kafka_0_10_0_1, Kafka_0_10_1_0, Kafka_0_10_1_1, Kafka_0_10_2_0, Kafka_0_10_2_1, Kafka_0_11_0_0, Kafka_0_11_0_2, Kafka_1_0_0, Kafka_1_0_1, Kafka_1_1_0, Kafka_1_1_1, Kafka_2_0_0, Kafka_2_1_0, Kafka_2_1_1, Kafka_2_2_0, Kafka_2_3_0)
   val ConsumerOffsetTopic = "__consumer_offsets"
 
   def isSupported(version: KafkaVersion) : Boolean = {
@@ -238,8 +231,7 @@ case class KafkaManagedOffsetCache(clusterContext: ClusterContext
   private[this] var lastGroupMemberMetadataCheckMillis : Long = System.currentTimeMillis()
 
   import KafkaManagedOffsetCache._
-  //import kafka.manager.utils.zero90.GroupMetadataManager._
-  import kafka.manager.utils.one10.GroupMetadataManager._
+  import kafka.manager.utils.two30.GroupMetadataManager._
 
   require(isSupported(clusterContext.config.version), s"Kafka version not support : ${clusterContext.config}")
 

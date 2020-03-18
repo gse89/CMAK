@@ -11,7 +11,7 @@ import grizzled.slf4j.Logging
 import kafka.common.TopicAndPartition
 import kafka.manager.jmx._
 import kafka.manager.utils
-import kafka.manager.utils.one10.MemberMetadata
+import kafka.manager.utils.two30.MemberMetadata
 import kafka.manager.utils.zero81.ForceReassignmentCommand
 import org.apache.kafka.common.requests.DescribeGroupsResponse
 import org.joda.time.DateTime
