@@ -24,7 +24,6 @@ import org.apache.kafka.clients.consumer.internals.ConsumerProtocol
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.types.Type._
 import org.apache.kafka.common.protocol.types.{ArrayOf, Field, Schema, Struct}
-import org.apache.kafka.common.requests.DescribeGroupsResponse
 
 import scala.collection.Map
 
@@ -390,21 +389,6 @@ case class GroupMetadata(groupId: String
 
 }
 
-object MemberMetadata {
-  import collection.JavaConverters._
-  def from(groupId: String, groupSummary: DescribeGroupsResponse.GroupMetadata, memberSummary: DescribeGroupsResponse.GroupMember) : MemberMetadata = {
-    val subscription = ConsumerProtocol.deserializeSubscription(ByteBuffer.wrap(memberSummary.memberMetadata().array()))
-    val assignment = ConsumerProtocol.deserializeAssignment(ByteBuffer.wrap(memberSummary.memberAssignment().array()))
-    MemberMetadata(memberSummary.memberId
-      , groupId, memberSummary.clientId
-      , memberSummary. clientHost
-      //, -1
-      , List((groupSummary.protocol, subscription.topics().asScala.toSet))
-      , assignment.partitions().asScala.map(tp => tp.topic() -> tp.partition()).toSet
-    )
-
-  }
-}
 case class MemberMetadata(memberId: String
                           , groupId: String
                           , clientId: String
@@ -415,3 +399,4 @@ case class MemberMetadata(memberId: String
                          ) {
   def protocols = supportedProtocols.map(_._1).toSet
 }
+
